@@ -8,7 +8,7 @@ import subprocess
 import shutil
 
 # --- Constants & Configuration ---
-APP_TITLE = "Dohna Dohna Translation Helper v6.2 (Comma Fix)"
+APP_TITLE = "Dohna Dohna Translation Helper v6.3 (Search Highlight)"
 THEME_NAME = "flatly"
 FONT_MAIN = ("Consolas", 10)
 CONFIG_FILE = "dohnatool.ini"
@@ -198,9 +198,14 @@ class DohnaTool(tk.Window):
             widget.bind("<Button-5>", self.on_mousewheel)
             widget.config(yscrollcommand=self.sync_scroll_set)
 
+        # Tags
         self.txt_jp.tag_configure("honorific", background="#aeeaff", foreground="black")
-        self.txt_jp.tag_configure("honorific_comma", background="#E1BEE7", foreground="#4A148C") # Light Purple bg
+        self.txt_jp.tag_configure("honorific_comma", background="#E1BEE7", foreground="#4A148C")
         self.txt_jp.tag_configure("active_honorific", background="#4facfe", underline=True, foreground="black")
+
+        # NEW: Search Highlight Tag
+        self.txt_jp.tag_configure("search_match", background="#90EE90", foreground="black")
+        self.txt_en.tag_configure("search_match", background="#90EE90", foreground="black")
 
     # --- Scrolling ---
     def sync_scroll_y(self, *args):
@@ -500,6 +505,27 @@ class DohnaTool(tk.Window):
                 end = f"1.0+{match.end()}c"
                 self.txt_jp.tag_add("honorific_comma", start, end)
 
+    # --- Search Highlighting (NEW) ---
+    def highlight_search_matches(self):
+        query = self.search_var.get()
+        if not query:
+            self.txt_jp.tag_remove("search_match", "1.0", tk.END)
+            self.txt_en.tag_remove("search_match", "1.0", tk.END)
+            return
+
+        for widget in [self.txt_jp, self.txt_en]:
+            widget.tag_remove("search_match", "1.0", tk.END)
+            start_pos = "1.0"
+            while True:
+                # search returns the start index of the match
+                start_pos = widget.search(query, start_pos, stopindex=tk.END, nocase=True)
+                if not start_pos:
+                    break
+                # calculate end index based on query length
+                end_pos = f"{start_pos}+{len(query)}c"
+                widget.tag_add("search_match", start_pos, end_pos)
+                start_pos = end_pos
+
     # --- Alignment & Files ---
     def align_text_content(self, jp_content, en_content):
         def tokenize(text):
@@ -630,6 +656,9 @@ class DohnaTool(tk.Window):
         self.txt_en.edit_modified(False)
         self.highlight_text_honorifics()
 
+        # Apply Search Highlight after loading
+        self.highlight_search_matches()
+
     def save_current_scene_to_memory(self):
         if self.current_scene_key and self.current_scene_key in self.en_scenes:
             text = self.txt_en.get("1.0", "end-1c")
@@ -701,6 +730,7 @@ class DohnaTool(tk.Window):
         query = self.search_var.get().lower()
         if not query:
             self.refresh_tree()
+            self.highlight_search_matches() # Clear highlights
             return
         self.tree.delete(*self.tree.get_children())
         source_keys = self.scene_order if self.scene_order else list(self.jp_scenes.keys())
@@ -715,7 +745,9 @@ class DohnaTool(tk.Window):
                 status = self.scene_statuses.get(k, '')
                 tags = (status,) if status else ()
                 self.tree.insert("", "end", iid=k, text=display, tags=tags)
+
         self.apply_blue_dots()
+        self.highlight_search_matches() # Highlight in current view
 
     def set_scene_status(self, color):
         selected = self.tree.selection()
